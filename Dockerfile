@@ -3,10 +3,15 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /app
 
 COPY EnergyApi.csproj ./
-RUN dotnet restore
+RUN dotnet restore EnergyApi.csproj
 
-COPY . ./
-RUN dotnet publish -c Release -o /out
+COPY Controllers/ ./Controllers/
+COPY Models/ ./Models/
+COPY Services/ ./Services/
+COPY Program.cs ./
+COPY appsettings*.json ./
+
+RUN dotnet publish EnergyApi.csproj -c Release -o /out
 
 # Étape 2 : image finale
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
