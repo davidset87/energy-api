@@ -1,5 +1,6 @@
-using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
 using EnergyApi.Services;
+using Microsoft.AspNetCore.Mvc;
 
 namespace EnergyApi.Controllers;
 
@@ -7,6 +8,9 @@ namespace EnergyApi.Controllers;
 [Route("api/[controller]")]
 public class EnergyController : ControllerBase
 {
+    public const int MinDurationHours = 1;
+    public const int MaxDurationHours = 6;
+
     private readonly IEnergyService _energyService;
 
     public EnergyController(IEnergyService energyService)
@@ -14,6 +18,7 @@ public class EnergyController : ControllerBase
         _energyService = energyService;
     }
 
+    // GET /api/energy/mix
     [HttpGet("mix")]
     public async Task<IActionResult> GetEnergyMix()
     {
@@ -22,28 +27,26 @@ public class EnergyController : ControllerBase
             var result = await _energyService.GetEnergyMixForThreeDaysAsync();
             return Ok(result);
         }
-        catch (Exception ex)
+        catch (ExternalApiException ex)
         {
-            return StatusCode(500, new { error = ex.Message });
+            return StatusCode(StatusCodes.Status502BadGateway, new { error = ex.Message });
         }
     }
 
+    // GET /api/energy/optimal-window?durationHours=3
+    // Out-of-range or missing values are rejected with a 400 by [ApiController] + [Range].
     [HttpGet("optimal-window")]
-    public async Task<IActionResult> GetOptimalWindow([FromQuery] int durationHours)
+    public async Task<IActionResult> GetOptimalWindow(
+        [FromQuery, Range(MinDurationHours, MaxDurationHours)] int durationHours)
     {
-        if (durationHours < 1 || durationHours > 6)
-        {
-            return BadRequest(new { error = "durationHours must be between 1 and 6." });
-        }
-
         try
         {
             var result = await _energyService.GetOptimalChargingWindowAsync(durationHours);
             return Ok(result);
         }
-        catch (Exception ex)
+        catch (ExternalApiException ex)
         {
-            return StatusCode(500, new { error = ex.Message });
+            return StatusCode(StatusCodes.Status502BadGateway, new { error = ex.Message });
         }
     }
 }

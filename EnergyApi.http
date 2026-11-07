@@ -1,6 +1,11 @@
 @EnergyApi_HostAddress = http://localhost:5252
 
-GET {{EnergyApi_HostAddress}}/weatherforecast/
+GET {{EnergyApi_HostAddress}}/api/energy/mix
+Accept: application/json
+
+###
+
+GET {{EnergyApi_HostAddress}}/api/energy/optimal-window?durationHours=3
 Accept: application/json
 
 ###
