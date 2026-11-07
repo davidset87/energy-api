@@ -1,63 +1,71 @@
-# Energy API 🌱
+# GridWatch API
 
-ASP.NET Core Web API providing UK energy mix data and optimal EV charging window calculations.
+[![CI](https://github.com/davidset87/energy-api/actions/workflows/ci.yml/badge.svg)](https://github.com/davidset87/energy-api/actions/workflows/ci.yml)
 
-## Live API
-🔗 https://energy-api-r80i.onrender.com/api/energy/mix
+ASP.NET Core (.NET 10) Web API behind the GridWatch app. It reads half-hourly generation data from the
+[UK Carbon Intensity API](https://carbonintensity.org.uk/) and exposes two endpoints:
+
+- the average energy mix for today and the next two days
+- the best window to charge an EV, i.e. the one with the highest average share of clean energy
+
+Frontend: https://github.com/davidset87/energy-frontend
 
 ## Endpoints
 
-### GET /api/energy/mix
-Returns the energy mix for today, tomorrow, and the day after tomorrow with clean energy percentages.
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/api/energy/mix` | Average energy mix per day (3 days) and clean energy percentage |
+| GET | `/api/energy/optimal-window?durationHours=3` | Best charging window for a duration of 1 to 6 hours |
 
-**Response example:**
-```json
-[
-  {
-    "date": "2026-07-01",
-    "averageMix": { "wind": 19.0, "solar": 11.7, "gas": 38.4 },
-    "cleanEnergyPercentage": 46.97
-  }
-]
-```
+Clean energy means biomass, nuclear, hydro, wind and solar.
 
-### GET /api/energy/optimal-window?durationHours=3
-Returns the optimal time window to charge an EV based on clean energy availability.
+### Errors
 
-**Parameters:**
-- `durationHours` (int, 1–6): desired charging duration in hours
+| Status | When |
+|--------|------|
+| 400 | `durationHours` is missing or outside 1 to 6 (validated with `[Range]`) |
+| 502 | The Carbon Intensity API is unreachable, times out, returns an error, or returns empty or malformed data |
 
-**Response example:**
-```json
-{
-  "startDateTime": "2026-07-02T09:30:00",
-  "endDateTime": "2026-07-02T12:30:00",
-  "averageCleanEnergyPercentage": 88.78
-}
-```
+## Design notes
 
-## Tech Stack
-- ASP.NET Core Web API (.NET 10)
-- C#
-- xUnit + Moq (unit tests)
-- Docker
-- Deployed on Render
+- Clean architecture in small pieces: controller, `IEnergyService`/`EnergyService` (typed `HttpClient` registered with `AddHttpClient`), models.
+- All dates are handled in UTC, and the clock is injected (`TimeProvider`) so the behaviour is deterministic in tests.
+- The charging window is computed on one sorted, continuous list of 30-minute slots, so a window can cross midnight without a special case.
+- The upstream API may also return the slot that ends exactly at the requested start. Slots outside the requested range are ignored, so the days are never shifted.
+- Upstream failures never become a raw 500: they are mapped to 502, with a 10 second timeout on the `HttpClient`.
 
-## Run Locally
+## Configuration
+
+| Setting | Environment variable | Default |
+|---------|----------------------|---------|
+| `CarbonIntensityApi:BaseUrl` | `CarbonIntensityApi__BaseUrl` | `https://api.carbonintensity.org.uk/` |
+| `Cors:AllowedOrigin` | `Cors__AllowedOrigin` | `http://localhost:5173` |
+
+CORS only allows the configured origin, with no wildcard.
+
+## Run locally
 
 ```bash
-cd EnergyApi
 dotnet run
 ```
 
-API will be available at `http://localhost:5252`
+The API listens on `http://localhost:5252`. `EnergyApi.http` contains ready-to-run requests.
 
-## Run Tests
+## Tests
 
 ```bash
-cd EnergyApi.Tests
-dotnet test
+dotnet test EnergyApi.Tests/EnergyApi.Tests.csproj
 ```
 
-## External API
-Data source: [Carbon Intensity API](https://carbon-intensity.github.io/api-definitions/)
+The tests run the real `EnergyService` and mock only the HTTP boundary (`HttpMessageHandler`) with a fixed clock.
+They cover averaging, day grouping, window selection, windows across midnight, the requested date range,
+and upstream failures (error status, empty body, malformed JSON, missing fields, timeout, unreachable).
+
+## Docker
+
+```bash
+docker build -t energy-api .
+docker run -p 8080:8080 energy-api
+```
+
+Multi-stage
