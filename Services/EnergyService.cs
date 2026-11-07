@@ -91,8 +91,15 @@ public class EnergyService : IEnergyService
                     };
 
                     // Fail early if a date is not valid, instead of crashing later.
-                    _ = ParseUtc(interval.From);
+                    var intervalStart = ParseUtc(interval.From);
                     _ = ParseUtc(interval.To);
+
+                    // The upstream API can also return the interval that ends exactly at the
+                    // requested start, so only keep intervals inside [from, to).
+                    if (intervalStart < from || intervalStart >= to)
+                    {
+                        continue;
+                    }
 
                     foreach (var mix in item.GetProperty("generationmix").EnumerateArray())
                     {

@@ -95,6 +95,25 @@ public class EnergyServiceTests
             Times.Once());
     }
 
+    [Fact]
+    public async Task GetEnergyMix_IgnoresIntervalsOutsideRequestedRange()
+    {
+        // Arrange - the upstream API can return the slot ending exactly at the requested start
+        var json = BuildResponse(
+            BuildIntervalJson("2025-12-31T23:30Z", "2026-01-01T00:00Z", ("wind", 99)),
+            BuildIntervalJson("2026-01-01T00:00Z", "2026-01-01T00:30Z", ("wind", 20)),
+            BuildIntervalJson("2026-01-04T00:00Z", "2026-01-04T00:30Z", ("wind", 99)));
+        var (service, _) = CreateServiceWithResponse(json);
+
+        // Act
+        var result = await service.GetEnergyMixForThreeDaysAsync();
+
+        // Assert
+        var day = Assert.Single(result);
+        Assert.Equal("2026-01-01", day.Date);
+        Assert.Equal(20, day.CleanEnergyPercentage);
+    }
+
     // ---------- Optimal window ----------
 
     [Fact]
